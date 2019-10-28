@@ -4,5 +4,5 @@ import "mini_lisp"
 
 func main() {
 	i := mini_lisp.NewInterpreter()
-	i.Interpret("(print # 1) ())( )(99()() alskdföl\n    ((test1324 4539asdf +test +))")
+	i.Interpret("(if (= a 7) (twice a) (twice 2)) # evaluates to 4 (twice 2)")
 }

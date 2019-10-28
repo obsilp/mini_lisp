@@ -8,7 +8,7 @@ import (
 type TokenType uint8
 
 const (
-	TokenTypeInvalid = iota
+	TokenTypeInvalid TokenType = iota
 	TokenTypeIgnore
 
 	TokenTypeWhitespace
@@ -19,8 +19,25 @@ const (
 	TokenTypeExpClose
 
 	TokenTypeInt
-	TokenTypeFunc
+	TokenTypeWord
 )
+
+func (t TokenType) String() string {
+	return map[TokenType]string{
+		TokenTypeInvalid: "TokenTypeInvalid",
+		TokenTypeIgnore:  "TokenTypeIgnore",
+
+		TokenTypeWhitespace: "TokenTypeWhitespace",
+		TokenTypeNewline:    "TokenTypeNewline",
+		TokenTypeComment:    "TokenTypeComment",
+
+		TokenTypeExpOpen:  "TokenTypeExpOpen",
+		TokenTypeExpClose: "TokenTypeExpClose",
+
+		TokenTypeInt:  "TokenTypeInt",
+		TokenTypeWord: "TokenTypeWord",
+	}[t]
+}
 
 type Token struct {
 	Type TokenType
@@ -49,8 +66,7 @@ func Tokenize(input string) []Token {
 			continue
 		}
 		if charTokenType == TokenTypeInvalid {
-			// TODO
-			panic(fmt.Sprintf("invalid char %c at line %d:%d", c, currentLine, i-lineStartPos))
+			panic(fmt.Sprintf("invalid char '%c' at line %d:%d", c, currentLine, i-lineStartPos+1))
 		}
 
 		if charTokenType != lastCharTokenType || end {
@@ -85,10 +101,10 @@ func getTokenTypeForChar(c rune, currentToken Token) TokenType {
 			return TokenTypeComment
 		}
 
-	// continue function names until the expression is closed or a space is found
-	case TokenTypeFunc:
+	// continue words until the expression is closed or a space is found
+	case TokenTypeWord:
 		if c != ')' && c != ' ' {
-			return TokenTypeFunc
+			return TokenTypeWord
 		}
 
 	// reduce more than one whitespace to one
@@ -112,14 +128,14 @@ func getTokenTypeForChar(c rune, currentToken Token) TokenType {
 
 	// special function names
 	case '=', '+':
-		return TokenTypeFunc
+		return TokenTypeWord
 	}
 
 	if unicode.IsNumber(c) {
 		return TokenTypeInt
 	}
 	if unicode.IsLetter(c) {
-		return TokenTypeFunc
+		return TokenTypeWord
 	}
 
 	// ignore any other control characters

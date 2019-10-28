@@ -1,0 +1,5 @@
+.idea/*
+!.idea/inspectionProfiles/
+!.idea/dictionaries/
+!.idea/runConfigurations/
+!.idea/users.iml

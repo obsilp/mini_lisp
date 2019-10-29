@@ -204,7 +204,7 @@ func consumeInt(s *stream) TokenType {
 }
 
 func consumeSymbol(s *stream) TokenType {
-	const invalid = " ()#"
+	const invalid = " ()#\n"
 	for s.Current() != 0 && !strings.ContainsAny(string(s.Current()), invalid) {
 		s.Read()
 	}

@@ -10,22 +10,22 @@ type state struct {
 func (s *state) clone() *state {
 	clone := &state{}
 	for k, v := range s.defines {
-		clone.assignDefine(k, v)
+		clone.setDefine(k, v)
 	}
 	for k, v := range s.funcs {
-		clone.assignFunc(k, v)
+		clone.setFunc(k, v)
 	}
 	return clone
 }
 
-func (s *state) assignDefine(name string, value interface{}) {
+func (s *state) setDefine(name string, value interface{}) {
 	if _, exists := s.defines[name]; exists {
 		panic(fmt.Sprintf("trying to reassign existing value '%s'", name))
 	}
-	s.assignDefineUnsafe(name, value)
+	s.setDefineUnsafe(name, value)
 }
 
-func (s *state) assignDefineUnsafe(name string, value interface{}) {
+func (s *state) setDefineUnsafe(name string, value interface{}) {
 	if s.defines == nil {
 		s.defines = make(map[string]interface{})
 	}
@@ -39,7 +39,7 @@ func (s *state) resolveDefine(name string) interface{} {
 	return nil
 }
 
-func (s *state) assignFunc(name string, f *customFunc) {
+func (s *state) setFunc(name string, f *customFunc) {
 	if s.funcs == nil {
 		s.funcs = make(map[string]*customFunc)
 	}
@@ -68,7 +68,7 @@ func (f *customFunc) invoke(args []interface{}, s *state) interface{} {
 	}
 	stateClone := s.clone()
 	for i, n := range f.paramNames {
-		stateClone.assignDefineUnsafe(n, autoResolve(args[i], s))
+		stateClone.setDefineUnsafe(n, autoResolve(args[i], s))
 	}
 	return autoResolve(f.exp, stateClone)
 }
@@ -126,10 +126,9 @@ func resolveExpression(exp *Expression, state *state) interface{} {
 		}
 	}
 
-	// TODO
 	values := make([]interface{}, len(exp.Values))
 	for i, v := range exp.Values {
-		values[i] = autoResolve(escapeExpression(v), state)
+		values[i] = autoResolve(deepCopyExpression(v), state)
 	}
 	return &Expression{Values: values}
 }
@@ -156,12 +155,11 @@ func autoResolve(i interface{}, state *state) interface{} {
 	return i
 }
 
-// TODO
-func escapeExpression(i interface{}) interface{} {
+func deepCopyExpression(i interface{}) interface{} {
 	if e, ok := i.(*Expression); ok {
 		values := make([]interface{}, len(e.Values))
 		for i, v := range e.Values {
-			values[i] = escapeExpression(v)
+			values[i] = deepCopyExpression(v)
 		}
 		return &Expression{Values: values}
 	}
@@ -172,10 +170,8 @@ func fnAdd(args []interface{}, s *state) interface{} {
 	if len(args) != 2 {
 		panic("function '+' expects 2 parameters")
 	}
-	args[0] = autoResolve(args[0], s)
-	args[1] = autoResolve(args[1], s)
-	i1, ok1 := args[0].(*Int)
-	i2, ok2 := args[1].(*Int)
+	i1, ok1 := autoResolve(args[0], s).(*Int)
+	i2, ok2 := autoResolve(args[1], s).(*Int)
 	if !ok1 || !ok2 {
 		panic("function '+' expects 2 int parameters")
 	}
@@ -186,10 +182,8 @@ func fnEquals(args []interface{}, s *state) interface{} {
 	if len(args) != 2 {
 		panic("function '=' expects 2 parameters")
 	}
-	args[0] = autoResolve(args[0], s)
-	args[1] = autoResolve(args[1], s)
-	o1, ok1 := args[0].(Equatable)
-	o2, ok2 := args[1].(Equatable)
+	o1, ok1 := autoResolve(args[0], s).(Equatable)
+	o2, ok2 := autoResolve(args[1], s).(Equatable)
 	if !ok1 || !ok2 {
 		panic("function '=' expects 2 equatable parameters")
 	}
@@ -204,9 +198,9 @@ func fnPrint(args []interface{}, s *state) interface{} {
 	if len(args) != 1 {
 		panic("function 'print' expects 1 parameter")
 	}
-	args[0] = autoResolve(args[0], s)
-	fmt.Println(args[0])
-	return args[0]
+	e := autoResolve(args[0], s)
+	fmt.Println(e)
+	return e
 }
 
 func fnList(args []interface{}, s *state) interface{} {
@@ -217,44 +211,41 @@ func fnFirst(args []interface{}, s *state) interface{} {
 	if len(args) == 0 {
 		panic("function 'first' expects 1 parameter")
 	}
-	args[0] = autoResolve(escapeExpression(args[0]), s)
-	list, ok := args[0].(*Expression)
+	list, ok := autoResolve(args[0], s).(*Expression)
 	if !ok {
 		panic("function 'first' expects a list as parameter 1")
 	}
 	if len(list.Values) == 0 {
 		panic("function 'first' cannot be called on an empty list")
 	}
-	return escapeExpression(list.Values[0])
+	return list.Values[0]
 }
 
 func fnRest(args []interface{}, s *state) interface{} {
 	if len(args) == 0 {
 		panic("function 'rest' expects 1 parameter")
 	}
-	args[0] = autoResolve(escapeExpression(args[0]), s)
-	list, ok := args[0].(*Expression)
+	list, ok := autoResolve(args[0], s).(*Expression)
 	if !ok {
 		panic("function 'rest' expects a list as parameter 1")
 	}
 	if len(list.Values) == 0 {
 		panic("function 'rest' cannot be called on an empty list")
 	}
-	return escapeExpression(&Expression{Values: list.Values[1:]})
+	return &Expression{Values: list.Values[1:]}
 }
 
 func fnAppend(args []interface{}, s *state) interface{} {
 	if len(args) != 2 {
 		panic("function 'append' expects 2 parameters")
 	}
-	args[0] = autoResolve(args[0], s)
-	base, ok := args[0].(*Expression)
+	base, ok := autoResolve(args[0], s).(*Expression)
 	if !ok {
 		panic("function 'append' expects a list as parameter 1")
 	}
+	base = deepCopyExpression(base).(*Expression)
 
-	base = escapeExpression(base).(*Expression)
-	add := autoResolve(escapeExpression(args[1]), s)
+	add := autoResolve(args[1], s)
 	if e, ok := add.(*Expression); ok {
 		for _, v := range e.Values {
 			base.Values = append(base.Values, v)
@@ -279,12 +270,12 @@ func fnIf(args []interface{}, s *state) interface{} {
 	if len(args) != 3 {
 		panic("function 'if' expects 3 parameters")
 	}
-	cond := autoResolve(escapeExpression(args[0]), s)
+	cond := autoResolve(args[0], s)
 	// empty expression is equal to false
 	if e, ok := cond.(*Expression); ok && len(e.Values) == 0 {
-		return autoResolve(escapeExpression(args[2]), s)
+		return autoResolve(args[2], s)
 	}
-	return autoResolve(escapeExpression(args[1]), s)
+	return autoResolve(args[1], s)
 }
 
 func defineSymbol(args []interface{}, s *state) interface{} {
@@ -292,7 +283,7 @@ func defineSymbol(args []interface{}, s *state) interface{} {
 	if !ok {
 		panic("function 'define' expects a symbol as parameter 1")
 	}
-	s.assignDefine(sym.Value, autoResolve(escapeExpression(args[1]), s))
+	s.setDefine(sym.Value, autoResolve(args[1], s))
 	return nil
 }
 
@@ -328,7 +319,7 @@ func defineFunction(args []interface{}, s *state) interface{} {
 		exp:        def,
 		paramNames: paramNames,
 	}
-	s.assignFunc(name.Value, f)
+	s.setFunc(name.Value, f)
 
 	return nil
 }

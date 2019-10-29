@@ -1,0 +1,21 @@
+(print (+ 1 2)) # -> 9
+(print (= 1 1)) # -> true
+(print (= 1 2)) # -> () which is an empty list and equivalent to false
+
+(print)
+
+(print 1) # outputs  1
+(print (list 1 2 3)) # -> (1 2 3)
+
+(print)
+
+(print (first (1 2 3))) # -> 1
+(print (rest (1 2 3))) # -> (2 3)
+(print (append (1 2 3) 4)) # -> (1 2 3 4)
+
+(print)
+
+(define a 1)  # a is bound to 1
+(define b (+ 3 4)) # b is bound to 7
+(print a)
+(print b)

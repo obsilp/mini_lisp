@@ -1,4 +1,0 @@
-(define reverse lambda (l)
-    (if l (append (reverse (rest l)) (first l)) ())
-)
-(print (reverse (list 1 2 3)))

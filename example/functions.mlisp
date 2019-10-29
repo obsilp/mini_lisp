@@ -1,0 +1,8 @@
+(define twice lambda (a) (+ a a)) # twice is a function that calculates a + a
+(define sum lambda (a b) (+ a b)) # b is bound to 7
+
+(define a 5)
+(print (if (= a 7) (twice a) (twice 2))) # evaluates to 4 (twice 2)
+(print (if (= a 5) (twice a) (twice 2))) # evaluates to 10 (twice a)
+
+(print (sum (+ 4 8) (twice 3))) # evaluates to 18 (4+8+2*3)

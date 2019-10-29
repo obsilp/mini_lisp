@@ -29,7 +29,7 @@ var parserTransitions = map[parserState]map[TokenType]parserState{
 	},
 	parserStateExpression: {
 		TokenTypeExpClose: parserStateEmpty,
-		TokenTypeExpOpen:  parserStateParam,
+		TokenTypeExpOpen:  parserStateParam, // recursion happens here
 		TokenTypeInt:      parserStateParam,
 		TokenTypeSymbol:   parserStateParam,
 	},
@@ -38,7 +38,7 @@ var parserTransitions = map[parserState]map[TokenType]parserState{
 		TokenTypeWhitespace: parserStateMore,
 	},
 	parserStateMore: {
-		TokenTypeExpOpen: parserStateParam,
+		TokenTypeExpOpen: parserStateParam, // recursion happens here
 		TokenTypeInt:     parserStateParam,
 		TokenTypeSymbol:  parserStateParam,
 	},
@@ -66,9 +66,17 @@ func Parse(tokens []Token) *AST {
 		}
 
 		// handle state transitions
+		oldState := state
 		state = parserTransitions[state][t.Type]
 		if t.Type == TokenTypeExpOpen {
+			// the first transition need a manual override to ensure that the empty
+			// state is committed as the root of the stack
+			if oldState == parserStateEmpty {
+				state = parserStateEmpty
+			}
+
 			stateStack = append(stateStack, state)
+
 			// this step allows for recursion to take place
 			state = parserStateExpression
 
@@ -96,7 +104,7 @@ func Parse(tokens []Token) *AST {
 				i, _ := strconv.Atoi(t.Str)
 				currentExpression.Add(&Int{Value: i})
 			case TokenTypeSymbol:
-				currentExpression.Add(&Word{Value: t.Str})
+				currentExpression.Add(&Symbol{Value: t.Str})
 			}
 		}
 	}

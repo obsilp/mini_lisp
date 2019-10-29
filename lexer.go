@@ -2,6 +2,7 @@ package mini_lisp
 
 import (
 	"fmt"
+	"strings"
 	"unicode"
 )
 
@@ -44,114 +45,142 @@ type Token struct {
 	Str  string
 }
 
+var consumers = []func([]rune, *int) TokenType{
+	consumeWhitespace,
+	consumeNewline,
+	consumeComment,
+	consumeExpressionOpen,
+	consumeExpressionClose,
+	consumeInt,
+	consumeSymbol,
+}
+
 func Tokenize(input string) []Token {
 	var tokens []Token
 
-	var lastCharTokenType TokenType
-	var currentToken Token
+	pos := 0
+	stream := []rune(input)
 
 	currentLine := 1
 	lineStartPos := 0
 
-	for i, c := range input {
-		if c == '\n' {
-			currentLine++
-			lineStartPos = i + 1
-		}
+	for pos < len(input) {
+		start := pos
+		t := consumeNext(stream, &pos)
 
-		charTokenType := getTokenTypeForChar(c, currentToken)
-		end := isSingleToken(charTokenType)
-
-		if charTokenType == TokenTypeIgnore {
+		if t == TokenTypeIgnore {
 			continue
 		}
-		if charTokenType == TokenTypeInvalid {
-			panic(fmt.Sprintf("invalid char '%c' at line %d:%d", c, currentLine, i-lineStartPos+1))
+		if t == TokenTypeInvalid {
+			panic(fmt.Sprintf("invalid char '%c' at line %d:%d", stream[pos], currentLine, pos-lineStartPos+1))
 		}
 
-		if charTokenType != lastCharTokenType || end {
-			if lastCharTokenType != TokenTypeInvalid {
-				tokens = append(tokens, currentToken)
-			}
-			currentToken = Token{Type: charTokenType, Str: string(c)}
-		} else {
-			currentToken.Str += string(c)
-		}
+		str := input[start:pos]
+		token := Token{Type: t, Str: str}
+		tokens = append(tokens, token)
 
-		lastCharTokenType = charTokenType
+		if t == TokenTypeNewline {
+			currentLine++
+			lineStartPos = pos + 1
+		}
 	}
-
-	// add last pending token
-	tokens = append(tokens, currentToken)
 
 	return tokens
 }
 
-func getTokenTypeForChar(c rune, currentToken Token) TokenType {
-	// allow comment to always interrupt a token
-	if currentToken.Type != TokenTypeComment && c == '#' {
-		return TokenTypeComment
-	}
+func consumeNext(stream []rune, pos *int) TokenType {
+	start := *pos
 
-	// support multi-character tokens by checking the current state
-	switch currentToken.Type {
-	// continue comments until a newline
-	case TokenTypeComment:
-		if c != '\n' {
-			return TokenTypeComment
+	for _, c := range consumers {
+		*pos = start
+		t := c(stream, pos)
+		if t != TokenTypeIgnore {
+			return t
 		}
-
-	// continue symbols until the expression is closed or a space is found
-	case TokenTypeSymbol:
-		if c != ')' && c != ' ' {
-			return TokenTypeSymbol
-		}
-
-	// reduce more than one whitespace to one
-	case TokenTypeWhitespace:
-		if c == ' ' {
-			return TokenTypeIgnore
-		}
-	}
-
-	switch c {
-	case ' ':
-		return TokenTypeWhitespace
-	case '#':
-		return TokenTypeComment
-	case '\n':
-		return TokenTypeNewline
-	case '(':
-		return TokenTypeExpOpen
-	case ')':
-		return TokenTypeExpClose
-
-	// special function names
-	case '=', '+':
-		return TokenTypeSymbol
-	}
-
-	if unicode.IsNumber(c) {
-		return TokenTypeInt
-	}
-	if unicode.IsLetter(c) {
-		return TokenTypeSymbol
 	}
 
 	// ignore any other control characters
-	if unicode.IsControl(c) {
+	if unicode.IsControl(stream[*pos]) {
 		return TokenTypeIgnore
 	}
 
 	return TokenTypeInvalid
 }
 
-func isSingleToken(t TokenType) bool {
-	switch t {
-	case TokenTypeNewline:
-		return true
-	case TokenTypeExpOpen, TokenTypeExpClose:
-		return true
+func consumeWhitespace(stream []rune, pos *int) TokenType {
+	startPos := *pos
+	for *pos < len(stream) && stream[*pos] == ' ' {
+		*pos++
 	}
-	return false
+	if *pos != startPos {
+		return TokenTypeWhitespace
+	}
+	return TokenTypeIgnore
+}
+
+func consumeNewline(stream []rune, pos *int) TokenType {
+	if stream[*pos] == '\n' {
+		*pos++
+		return TokenTypeNewline
+	}
+	return TokenTypeIgnore
+}
+
+func consumeComment(stream []rune, pos *int) TokenType {
+	if stream[*pos] != '#' {
+		return TokenTypeIgnore
+	}
+	for *pos < len(stream) && stream[*pos] != '\n' {
+		*pos++
+	}
+	return TokenTypeComment
+}
+
+func consumeExpressionOpen(stream []rune, pos *int) TokenType {
+	if stream[*pos] != '(' {
+		return TokenTypeIgnore
+	}
+	*pos++
+	return TokenTypeExpOpen
+}
+
+func consumeExpressionClose(stream []rune, pos *int) TokenType {
+	if stream[*pos] != ')' {
+		return TokenTypeIgnore
+	}
+	*pos++
+	return TokenTypeExpClose
+}
+
+func consumeInt(stream []rune, pos *int) TokenType {
+	c := stream[*pos]
+
+	if !unicode.IsDigit(c) {
+		if c == '+' || c == '-' {
+			// do not consume the token if the sign is not followed by a number
+			*pos++
+			if *pos >= len(stream) || !unicode.IsDigit(stream[*pos]) {
+				return TokenTypeIgnore
+			}
+		} else {
+			return TokenTypeIgnore
+		}
+	}
+
+	for *pos < len(stream) && unicode.IsDigit(stream[*pos]) {
+		*pos++
+	}
+	return TokenTypeInt
+}
+
+func consumeSymbol(stream []rune, pos *int) TokenType {
+	const invalid = "()# "
+	startPos := *pos
+	for *pos < len(stream) && !strings.ContainsAny(string(stream[*pos]), invalid) {
+		*pos++
+	}
+	if *pos != startPos {
+		return TokenTypeSymbol
+	}
+	return TokenTypeIgnore
 }

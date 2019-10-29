@@ -31,7 +31,7 @@ var parserTransitions = map[parserState]map[TokenType]parserState{
 		TokenTypeExpClose: parserStateEmpty,
 		TokenTypeExpOpen:  parserStateParam,
 		TokenTypeInt:      parserStateParam,
-		TokenTypeWord:     parserStateParam,
+		TokenTypeSymbol:   parserStateParam,
 	},
 	parserStateParam: {
 		TokenTypeExpClose:   parserStateEmpty,
@@ -40,7 +40,7 @@ var parserTransitions = map[parserState]map[TokenType]parserState{
 	parserStateMore: {
 		TokenTypeExpOpen: parserStateParam,
 		TokenTypeInt:     parserStateParam,
-		TokenTypeWord:    parserStateParam,
+		TokenTypeSymbol:  parserStateParam,
 	},
 }
 
@@ -95,7 +95,7 @@ func Parse(tokens []Token) *AST {
 			case TokenTypeInt:
 				i, _ := strconv.Atoi(t.Str)
 				currentExpression.Add(&Int{Value: i})
-			case TokenTypeWord:
+			case TokenTypeSymbol:
 				currentExpression.Add(&Word{Value: t.Str})
 			}
 		}

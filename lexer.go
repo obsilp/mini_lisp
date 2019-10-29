@@ -19,7 +19,7 @@ const (
 	TokenTypeExpClose
 
 	TokenTypeInt
-	TokenTypeWord
+	TokenTypeSymbol
 )
 
 func (t TokenType) String() string {
@@ -34,8 +34,8 @@ func (t TokenType) String() string {
 		TokenTypeExpOpen:  "TokenTypeExpOpen",
 		TokenTypeExpClose: "TokenTypeExpClose",
 
-		TokenTypeInt:  "TokenTypeInt",
-		TokenTypeWord: "TokenTypeWord",
+		TokenTypeInt:    "TokenTypeInt",
+		TokenTypeSymbol: "TokenTypeSymbol",
 	}[t]
 }
 
@@ -101,10 +101,10 @@ func getTokenTypeForChar(c rune, currentToken Token) TokenType {
 			return TokenTypeComment
 		}
 
-	// continue words until the expression is closed or a space is found
-	case TokenTypeWord:
+	// continue symbols until the expression is closed or a space is found
+	case TokenTypeSymbol:
 		if c != ')' && c != ' ' {
-			return TokenTypeWord
+			return TokenTypeSymbol
 		}
 
 	// reduce more than one whitespace to one
@@ -128,14 +128,14 @@ func getTokenTypeForChar(c rune, currentToken Token) TokenType {
 
 	// special function names
 	case '=', '+':
-		return TokenTypeWord
+		return TokenTypeSymbol
 	}
 
 	if unicode.IsNumber(c) {
 		return TokenTypeInt
 	}
 	if unicode.IsLetter(c) {
-		return TokenTypeWord
+		return TokenTypeSymbol
 	}
 
 	// ignore any other control characters

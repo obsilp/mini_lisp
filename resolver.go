@@ -4,14 +4,30 @@ import "fmt"
 
 type state struct {
 	defines map[string]interface{}
+	funcs   map[string]*customFunc
+}
+
+func (s *state) clone() *state {
+	clone := &state{}
+	for k, v := range s.defines {
+		clone.assignDefine(k, v)
+	}
+	for k, v := range s.funcs {
+		clone.assignFunc(k, v)
+	}
+	return clone
 }
 
 func (s *state) assignDefine(name string, value interface{}) {
-	if s.defines == nil {
-		s.defines = make(map[string]interface{})
-	}
 	if _, exists := s.defines[name]; exists {
 		panic(fmt.Sprintf("trying to reassign existing value '%s'", name))
+	}
+	s.assignDefineUnsafe(name, value)
+}
+
+func (s *state) assignDefineUnsafe(name string, value interface{}) {
+	if s.defines == nil {
+		s.defines = make(map[string]interface{})
 	}
 	s.defines[name] = value
 }
@@ -21,6 +37,40 @@ func (s *state) resolveDefine(name string) interface{} {
 		return d
 	}
 	return nil
+}
+
+func (s *state) assignFunc(name string, f *customFunc) {
+	if s.funcs == nil {
+		s.funcs = make(map[string]*customFunc)
+	}
+	if _, exists := s.funcs[name]; exists {
+		panic(fmt.Sprintf("trying to reassign existing function '%s'", name))
+	}
+	s.funcs[name] = f
+}
+
+func (s *state) resolveFunc(name string) *customFunc {
+	if f, exists := s.funcs[name]; exists {
+		return f
+	}
+	return nil
+}
+
+type customFunc struct {
+	name       string
+	exp        *Expression
+	paramNames []string
+}
+
+func (f *customFunc) invoke(args []interface{}, s *state) interface{} {
+	if len(args) != len(f.paramNames) {
+		panic(fmt.Sprintf("parameter count for function '%s' is not correct. expecting %d got %d", f.name, len(f.paramNames), len(args)))
+	}
+	stateClone := s.clone()
+	for i, n := range f.paramNames {
+		stateClone.assignDefineUnsafe(n, autoResolve(args[i], s))
+	}
+	return autoResolve(f.exp, stateClone)
 }
 
 type inbuiltFunction func([]interface{}, *state) interface{}
@@ -70,13 +120,18 @@ func resolveExpression(exp *Expression, state *state) interface{} {
 		if fn != nil {
 			return fn(exp.Values[1:], state)
 		}
+		cFn := state.resolveFunc(s.Value)
+		if cFn != nil {
+			return cFn.invoke(exp.Values[1:], state)
+		}
 	}
 
+	// TODO
+	values := make([]interface{}, len(exp.Values))
 	for i, v := range exp.Values {
-		exp.Values[i] = autoResolve(v, state)
+		values[i] = autoResolve(escapeExpression(v), state)
 	}
-
-	return exp
+	return &Expression{Values: values}
 }
 
 func resolveSymbol(sym *Symbol, state *state) interface{} {
@@ -97,6 +152,18 @@ func autoResolve(i interface{}, state *state) interface{} {
 		return resolveExpression(i.(*Expression), state)
 	case *Symbol:
 		return resolveSymbol(i.(*Symbol), state)
+	}
+	return i
+}
+
+// TODO
+func escapeExpression(i interface{}) interface{} {
+	if e, ok := i.(*Expression); ok {
+		values := make([]interface{}, len(e.Values))
+		for i, v := range e.Values {
+			values[i] = escapeExpression(v)
+		}
+		return &Expression{Values: values}
 	}
 	return i
 }
@@ -150,7 +217,7 @@ func fnFirst(args []interface{}, s *state) interface{} {
 	if len(args) == 0 {
 		panic("function 'first' expects 1 parameter")
 	}
-	args[0] = autoResolve(args[0], s)
+	args[0] = autoResolve(escapeExpression(args[0]), s)
 	list, ok := args[0].(*Expression)
 	if !ok {
 		panic("function 'first' expects a list as parameter 1")
@@ -158,14 +225,14 @@ func fnFirst(args []interface{}, s *state) interface{} {
 	if len(list.Values) == 0 {
 		panic("function 'first' cannot be called on an empty list")
 	}
-	return list.Values[0]
+	return escapeExpression(list.Values[0])
 }
 
 func fnRest(args []interface{}, s *state) interface{} {
 	if len(args) == 0 {
 		panic("function 'rest' expects 1 parameter")
 	}
-	args[0] = autoResolve(args[0], s)
+	args[0] = autoResolve(escapeExpression(args[0]), s)
 	list, ok := args[0].(*Expression)
 	if !ok {
 		panic("function 'rest' expects a list as parameter 1")
@@ -173,7 +240,7 @@ func fnRest(args []interface{}, s *state) interface{} {
 	if len(list.Values) == 0 {
 		panic("function 'rest' cannot be called on an empty list")
 	}
-	return &Expression{Values: list.Values[1:]}
+	return escapeExpression(&Expression{Values: list.Values[1:]})
 }
 
 func fnAppend(args []interface{}, s *state) interface{} {
@@ -185,29 +252,83 @@ func fnAppend(args []interface{}, s *state) interface{} {
 	if !ok {
 		panic("function 'append' expects a list as parameter 1")
 	}
-	return &Expression{Values: append(base.Values, autoResolve(args[1], s))}
+
+	base = escapeExpression(base).(*Expression)
+	add := autoResolve(escapeExpression(args[1]), s)
+	if e, ok := add.(*Expression); ok {
+		for _, v := range e.Values {
+			base.Values = append(base.Values, v)
+		}
+	} else {
+		base.Values = append(base.Values, add)
+	}
+
+	return &Expression{Values: base.Values}
 }
 
 func fnDefine(args []interface{}, s *state) interface{} {
-	if len(args) != 2 {
-		panic("function 'define' expects 2 parameters")
+	if len(args) == 2 {
+		return defineSymbol(args, s)
+	} else if len(args) == 4 {
+		return defineFunction(args, s)
 	}
-	sym, ok := args[0].(*Symbol)
-	if !ok {
-		panic("function 'define' expects a symbol as parameter 1")
-	}
-	s.assignDefine(sym.Value, autoResolve(args[1], s))
-	return nil
+	panic("function 'define' expects either 2 or 4 parameters")
 }
 
 func fnIf(args []interface{}, s *state) interface{} {
 	if len(args) != 3 {
 		panic("function 'if' expects 3 parameters")
 	}
-	cond := autoResolve(args[0], s)
+	cond := autoResolve(escapeExpression(args[0]), s)
 	// empty expression is equal to false
 	if e, ok := cond.(*Expression); ok && len(e.Values) == 0 {
-		return autoResolve(args[2], s)
+		return autoResolve(escapeExpression(args[2]), s)
 	}
-	return autoResolve(args[1], s)
+	return autoResolve(escapeExpression(args[1]), s)
+}
+
+func defineSymbol(args []interface{}, s *state) interface{} {
+	sym, ok := args[0].(*Symbol)
+	if !ok {
+		panic("function 'define' expects a symbol as parameter 1")
+	}
+	s.assignDefine(sym.Value, autoResolve(escapeExpression(args[1]), s))
+	return nil
+}
+
+func defineFunction(args []interface{}, s *state) interface{} {
+	if fmt.Sprint(args[1]) != "lambda" {
+		panic("function 'define' with 4 parameter is only supported for lambda definitions")
+	}
+
+	name, ok := args[0].(*Symbol)
+	if !ok {
+		panic("function 'define' expects a symbol as parameter 1")
+	}
+	params, ok := args[2].(*Expression)
+	if !ok {
+		panic("function 'define' expects an expression as parameter 3")
+	}
+	def, ok := args[3].(*Expression)
+	if !ok {
+		panic("function 'define' expects an expression as parameter 4")
+	}
+
+	paramNames := make([]string, 0, len(def.Values))
+	for _, v := range params.Values {
+		sym, ok := v.(*Symbol)
+		if !ok {
+			panic("function 'define' only allows symbols as parameter names for lambda definitions")
+		}
+		paramNames = append(paramNames, sym.Value)
+	}
+
+	f := &customFunc{
+		name:       name.Value,
+		exp:        def,
+		paramNames: paramNames,
+	}
+	s.assignFunc(name.Value, f)
+
+	return nil
 }

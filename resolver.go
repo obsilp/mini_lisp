@@ -194,12 +194,17 @@ func fnEquals(args []interface{}, s *state) interface{} {
 }
 
 func fnPrint(args []interface{}, s *state) interface{} {
-	if len(args) != 1 {
-		panic("function 'print' expects 1 parameter")
+	if len(args) > 1 {
+		panic("function 'print' expects at most 1 parameter")
 	}
-	e := autoResolve(args[0], s)
-	fmt.Println(e)
-	return e
+	if len(args) == 0 {
+		fmt.Println()
+		return nil
+	} else {
+		e := autoResolve(args[0], s)
+		fmt.Println(e)
+		return e
+	}
 }
 
 func fnList(args []interface{}, s *state) interface{} {

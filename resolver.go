@@ -78,7 +78,6 @@ type inbuiltFunction func([]interface{}, *state) interface{}
 // initialized in init because of cyclic initialization loop
 var inbuiltFunctions map[string]inbuiltFunction
 
-// TODO ?
 func init() {
 	inbuiltFunctions = map[string]inbuiltFunction{
 		"+":      fnAdd,

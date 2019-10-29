@@ -39,6 +39,7 @@ func init() {
 		"rest":   fnRest,
 		"append": fnAppend,
 		"define": fnDefine,
+		"if":     fnIf,
 	}
 }
 
@@ -128,6 +129,7 @@ func fnEquals(args []interface{}, s *state) interface{} {
 	if o1.Equals(o2) {
 		return &True{}
 	}
+	// empty expression is equal to false
 	return &Expression{}
 }
 
@@ -196,4 +198,16 @@ func fnDefine(args []interface{}, s *state) interface{} {
 	}
 	s.assignDefine(sym.Value, autoResolve(args[1], s))
 	return nil
+}
+
+func fnIf(args []interface{}, s *state) interface{} {
+	if len(args) != 3 {
+		panic("function 'if' expects 3 parameters")
+	}
+	cond := autoResolve(args[0], s)
+	// empty expression is equal to false
+	if e, ok := cond.(*Expression); ok && len(e.Values) == 0 {
+		return autoResolve(args[2], s)
+	}
+	return autoResolve(args[1], s)
 }

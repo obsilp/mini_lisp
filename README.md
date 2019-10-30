@@ -48,4 +48,4 @@ Check out the _examples_ directory to see things in action.
 
 #### Parser Automaton
 
-![](https://i.imgur.com/KAreuSe.jpg)
+![](https://i.imgur.com/SEybL9W.png)
